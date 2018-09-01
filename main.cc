@@ -8,8 +8,7 @@ struct args {
 static void foo(schedule *S, void *ud) {
     args *arg = (args *) ud;
     int start = arg->n;
-    int i;
-    for (i = 0; i < 10000; i++) {
+    for (int i = 0; i < 10000; i++) {
         printf("coroutine %d : %d\n", coroutine_running(S), start + i);
         coroutine_yield(S);
     }
@@ -21,10 +20,10 @@ static void test(schedule *S) {
     args arg3 = {1000};
     args arg4 = {10000};
 
-    int co1 = coroutine_new(S, foo, &arg1);
-    int co2 = coroutine_new(S, foo, &arg2);
-    int co3 = coroutine_new(S, foo, &arg3);
-    int co4 = coroutine_new(S, foo, &arg4);
+    int64_t co1 = coroutine_new(S, foo, &arg1);
+    int64_t co2 = coroutine_new(S, foo, &arg2);
+    int64_t co3 = coroutine_new(S, foo, &arg3);
+    int64_t co4 = coroutine_new(S, foo, &arg4);
     printf("main start\n");
     while (coroutine_status(S, co1) && coroutine_status(S, co2) &&
            coroutine_status(S, co3) && coroutine_status(S, co4)) {
