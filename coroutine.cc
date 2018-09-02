@@ -1,41 +1,15 @@
-#include "coroutine.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <stddef.h>
 #include <string.h>
-#include <ucontext.h>
-#include <unordered_map>
+#include <assert.h>
 
-#define STACK_SIZE (1024*1024)
-//#define DEFAULT_COROUTINE 16
+#include "coroutine.h"
 
-struct coroutine;
+thread_local static schedule S;
 
-struct schedule {
-#ifdef SHARED_STACK
-    char stack[STACK_SIZE];
-#endif
-    ucontext_t main;
-    //int nco;
-    //int cap;
-    int64_t running;
-    int64_t next_id;
-    //coroutine **co;
-    std::unordered_map<int64_t, coroutine *> cos;
-    coroutine *dead_co;
-};
-
-struct coroutine {
-    coroutine_func func;
-    void *ud;
-    ucontext_t ctx;
-    schedule *sch;
-    ptrdiff_t cap;
-    ptrdiff_t size;
-    int status;
-    char *stack;
-};
+schedule::schedule() {
+    running = -1;
+    next_id = 0;
+    dead_co = NULL;
+}
 
 coroutine *_co_new(schedule *S, coroutine_func func, void *ud) {
     coroutine *co = new coroutine();
@@ -55,32 +29,18 @@ coroutine *_co_new(schedule *S, coroutine_func func, void *ud) {
 
 void _co_delete(coroutine *co) {
     free(co->stack);
-    free(co);
+    delete co;
 }
 
 schedule *coroutine_open(void) {
     schedule *S = new schedule();
-    //S->nco = 0;
-    //S->cap = DEFAULT_COROUTINE;
-    S->running = -1;
-    S->next_id = 0;
-    //S->co = (coroutine **) malloc(sizeof(coroutine *) * S->cap);
-    //memset(S->co, 0, sizeof(coroutine *) * S->cap);
-    S->dead_co = NULL;
+//    S->running = -1;
+//    S->next_id = 0;
+//    S->dead_co = NULL;
     return S;
 }
 
 void coroutine_close(schedule *S) {
-#if 0
-    int i;
-    for (i = 0; i < S->cap; i++) {
-        coroutine *co = S->co[i];
-        if (co) {
-            _co_delete(co);
-        }
-    }
-#endif
-
     for (auto it = S->cos.begin(); it != S->cos.end(); /* NULL */) {
         coroutine *co = it->second;
         if (co) {
@@ -88,10 +48,7 @@ void coroutine_close(schedule *S) {
             it = S->cos.erase(it);
         }
     }
-
-    //free(S->co);
-    //S->co = NULL;
-    free(S);
+    delete S;
 }
 
 int64_t coroutine_new(schedule *S, coroutine_func func, void *ud) {
@@ -100,29 +57,6 @@ int64_t coroutine_new(schedule *S, coroutine_func func, void *ud) {
     coroutine *co = _co_new(S, func, ud);
     S->cos.insert(std::make_pair(id, co));
     return id;
-#if 0
-    if (S->nco >= S->cap) {
-        int id = S->cap;
-        S->co = (coroutine **) realloc(S->co, S->cap * 2 * sizeof(coroutine *));
-        memset(S->co + S->cap, 0, sizeof(coroutine *) * S->cap);
-        S->co[S->cap] = co;
-        S->cap *= 2;
-        ++S->nco;
-        return id;
-    } else {
-        int i;
-        for (i = 0; i < S->cap; i++) {
-            int id = (i + S->nco) % S->cap;
-            if (S->co[id] == NULL) {
-                S->co[id] = co;
-                ++S->nco;
-                return id;
-            }
-        }
-    }
-    assert(0);
-    return -1;
-#endif
 }
 
 static void mainfunc(uint32_t low32, uint32_t hi32) {
@@ -130,15 +64,9 @@ static void mainfunc(uint32_t low32, uint32_t hi32) {
     coroutine *C = (coroutine *) ptr;
     schedule *S = C->sch;
     int64_t id = S->running;
-#if 0
-    schedule *S = (schedule *)ptr;
-    int id = S->running;
-    coroutine *C = S->co[id];
-#endif
+
     C->func(S, C->ud);
-    //_co_delete(C);
-    //S->co[id] = NULL;
-    //--S->nco;
+
     S->dead_co = C;
     S->cos.erase(id);
     S->running = -1;
@@ -146,13 +74,13 @@ static void mainfunc(uint32_t low32, uint32_t hi32) {
 
 void coroutine_resume(schedule *S, int64_t id) {
     assert(S->running == -1);
-    //assert(id >= 0 && id < S->cap);
-    //coroutine *C = S->co[id];
     auto it = S->cos.find(id);
     assert(it != S->cos.end());
+
     coroutine *C = it->second;
     if (C == NULL)
         return;
+
     int status = C->status;
     switch (status) {
         case COROUTINE_READY: {
@@ -166,7 +94,6 @@ void coroutine_resume(schedule *S, int64_t id) {
             C->ctx.uc_link = &S->main;
             S->running = id;
             C->status = COROUTINE_RUNNING;
-            //uintptr_t ptr = (uintptr_t)S;
             uintptr_t ptr = (uintptr_t) C;
             makecontext(&C->ctx, (void (*)(void)) mainfunc, 2, (uint32_t) ptr, (uint32_t)(ptr >> 32));
             swapcontext(&S->main, &C->ctx);
@@ -206,11 +133,7 @@ static void _save_stack(coroutine *C, char *top) {
 #endif
 
 void coroutine_yield(schedule *S) {
-    int64_t id = S->running;
-    assert(id >= 0);
-    //coroutine *C = S->co[id];
-
-    auto it = S->cos.find(id);
+    auto it = S->cos.find(S->running);
     assert(it != S->cos.end());
     coroutine *C = it->second;
 #ifdef SHARED_STACK
@@ -223,14 +146,8 @@ void coroutine_yield(schedule *S) {
 }
 
 int coroutine_status(schedule *S, int64_t id) {
-#if 0
-    assert(id >= 0 && id < S->cap);
-    if (S->co[id] == NULL) {
-        return COROUTINE_DEAD;
-    }
+    assert(id >= 0);
 
-    return S->co[id]->status;
-#endif
     auto it = S->cos.find(id);
     if (it == S->cos.end()) {
         return COROUTINE_DEAD;
