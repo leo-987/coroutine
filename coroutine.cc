@@ -3,7 +3,7 @@
 
 #include "coroutine.h"
 
-thread_local static schedule S;
+thread_local static schedule *S;
 
 schedule::schedule() {
     running = -1;
@@ -11,7 +11,7 @@ schedule::schedule() {
     dead_co = NULL;
 }
 
-coroutine *_co_new(schedule *S, coroutine_func func, void *ud) {
+coroutine *_co_new(coroutine_func func, void *ud) {
     coroutine *co = new coroutine();
     co->func = func;
     co->ud = ud;
@@ -32,15 +32,11 @@ void _co_delete(coroutine *co) {
     delete co;
 }
 
-schedule *coroutine_open(void) {
-    schedule *S = new schedule();
-//    S->running = -1;
-//    S->next_id = 0;
-//    S->dead_co = NULL;
-    return S;
+void coroutine_open(void) {
+    S = new schedule();
 }
 
-void coroutine_close(schedule *S) {
+void coroutine_close() {
     for (auto it = S->cos.begin(); it != S->cos.end(); /* NULL */) {
         coroutine *co = it->second;
         if (co) {
@@ -51,10 +47,10 @@ void coroutine_close(schedule *S) {
     delete S;
 }
 
-int64_t coroutine_new(schedule *S, coroutine_func func, void *ud) {
+int64_t coroutine_new(coroutine_func func, void *ud) {
     int64_t id = S->next_id++;
     assert(S->cos.find(id) == S->cos.end());
-    coroutine *co = _co_new(S, func, ud);
+    coroutine *co = _co_new(func, ud);
     S->cos.insert(std::make_pair(id, co));
     return id;
 }
@@ -65,14 +61,14 @@ static void mainfunc(uint32_t low32, uint32_t hi32) {
     schedule *S = C->sch;
     int64_t id = S->running;
 
-    C->func(S, C->ud);
+    C->func(C->ud);
 
     S->dead_co = C;
     S->cos.erase(id);
     S->running = -1;
 }
 
-void coroutine_resume(schedule *S, int64_t id) {
+void coroutine_resume(int64_t id) {
     assert(S->running == -1);
     auto it = S->cos.find(id);
     assert(it != S->cos.end());
@@ -132,7 +128,7 @@ static void _save_stack(coroutine *C, char *top) {
 }
 #endif
 
-void coroutine_yield(schedule *S) {
+void coroutine_yield() {
     auto it = S->cos.find(S->running);
     assert(it != S->cos.end());
     coroutine *C = it->second;
@@ -145,7 +141,7 @@ void coroutine_yield(schedule *S) {
     swapcontext(&C->ctx, &S->main);
 }
 
-int coroutine_status(schedule *S, int64_t id) {
+int coroutine_status(int64_t id) {
     assert(id >= 0);
 
     auto it = S->cos.find(id);
@@ -156,6 +152,6 @@ int coroutine_status(schedule *S, int64_t id) {
     return it->second->status;
 }
 
-int coroutine_running(schedule *S) {
+int coroutine_running() {
     return S->running;
 }

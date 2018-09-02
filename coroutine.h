@@ -15,7 +15,7 @@
 
 struct schedule;
 
-typedef void (*coroutine_func)(schedule *, void *ud);
+typedef void (*coroutine_func)(void *ud);
 
 struct coroutine {
     coroutine_func func;
@@ -41,12 +41,12 @@ struct schedule {
     coroutine *dead_co;
 };
 
-schedule *coroutine_open(void);
-void coroutine_close(schedule *);
-int64_t coroutine_new(schedule *, coroutine_func, void *ud);
-void coroutine_resume(schedule *, int64_t id);
-int coroutine_status(schedule *, int64_t id);
-int coroutine_running(schedule *);
-void coroutine_yield(schedule *);
+void coroutine_open(void);
+void coroutine_close();
+int64_t coroutine_new(coroutine_func, void *ud);
+void coroutine_resume(int64_t id);
+int coroutine_status(int64_t id);
+int coroutine_running();
+void coroutine_yield();
 
 #endif
