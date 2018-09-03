@@ -18,8 +18,10 @@ struct schedule;
 typedef void (*coroutine_func)(void *ud);
 
 struct coroutine {
-    coroutine_func func;
-    void *ud;
+    coroutine(coroutine_func func, void *arg);
+
+    coroutine_func _callback;
+    void *_arg;
     ucontext_t ctx;
     schedule *sch;
     ptrdiff_t cap;
@@ -41,12 +43,12 @@ struct schedule {
     coroutine *dead_co;
 };
 
-void coroutine_open(void);
+void coroutine_open();
 void coroutine_close();
 int64_t coroutine_new(coroutine_func, void *ud);
 void coroutine_resume(int64_t id);
 int coroutine_status(int64_t id);
-int coroutine_running();
+int64_t coroutine_running_id();
 void coroutine_yield();
 
 #endif

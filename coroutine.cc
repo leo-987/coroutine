@@ -5,6 +5,20 @@
 
 thread_local static schedule *S;
 
+coroutine::coroutine(coroutine_func func, void *ud) {
+    _callback = func;
+    _arg = ud;
+    sch = S;
+    cap = 0;
+    size = 0;
+    status = COROUTINE_READY;
+#ifdef SHARED_STACK
+    stack = NULL;
+#else
+    stack = (char *) malloc(STACK_SIZE);
+#endif
+}
+
 schedule::schedule() {
     running = -1;
     next_id = 0;
@@ -12,18 +26,7 @@ schedule::schedule() {
 }
 
 coroutine *_co_new(coroutine_func func, void *ud) {
-    coroutine *co = new coroutine();
-    co->func = func;
-    co->ud = ud;
-    co->sch = S;
-    co->cap = 0;
-    co->size = 0;
-    co->status = COROUTINE_READY;
-#ifdef SHARED_STACK
-    co->stack = NULL;
-#else
-    co->stack = (char *) malloc(STACK_SIZE);
-#endif
+    coroutine *co = new coroutine(func, ud);
     return co;
 }
 
@@ -61,7 +64,7 @@ static void mainfunc(uint32_t low32, uint32_t hi32) {
     schedule *S = C->sch;
     int64_t id = S->running;
 
-    C->func(C->ud);
+    C->_callback(C->_arg);
 
     S->dead_co = C;
     S->cos.erase(id);
@@ -152,6 +155,6 @@ int coroutine_status(int64_t id) {
     return it->second->status;
 }
 
-int coroutine_running() {
+int64_t coroutine_running_id() {
     return S->running;
 }
