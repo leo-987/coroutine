@@ -5,7 +5,8 @@
 
 thread_local static schedule *S;
 
-coroutine::coroutine(coroutine_func func, void *ud) {
+
+coroutine::coroutine(std::function<void(void*)> func, void *ud) {
     _callback = func;
     _arg = ud;
     sch = S;
@@ -19,25 +20,30 @@ coroutine::coroutine(coroutine_func func, void *ud) {
 #endif
 }
 
+
 schedule::schedule() {
     running = -1;
     next_id = 0;
     dead_co = NULL;
 }
 
-coroutine *_co_new(coroutine_func func, void *ud) {
+
+coroutine *_co_new(std::function<void(void*)> func, void *ud) {
     coroutine *co = new coroutine(func, ud);
     return co;
 }
+
 
 void _co_delete(coroutine *co) {
     free(co->stack);
     delete co;
 }
 
+
 void coroutine_open(void) {
     S = new schedule();
 }
+
 
 void coroutine_close() {
     for (auto it = S->cos.begin(); it != S->cos.end(); /* NULL */) {
@@ -50,13 +56,15 @@ void coroutine_close() {
     delete S;
 }
 
-int64_t coroutine_new(coroutine_func func, void *ud) {
+
+int64_t coroutine_new(std::function<void(void*)> func, void *ud) {
     int64_t id = S->next_id++;
     assert(S->cos.find(id) == S->cos.end());
     coroutine *co = _co_new(func, ud);
     S->cos.insert(std::make_pair(id, co));
     return id;
 }
+
 
 static void mainfunc(uint32_t low32, uint32_t hi32) {
     uintptr_t ptr = (uintptr_t) low32 | ((uintptr_t) hi32 << 32);
@@ -70,6 +78,7 @@ static void mainfunc(uint32_t low32, uint32_t hi32) {
     S->cos.erase(id);
     S->running = -1;
 }
+
 
 void coroutine_resume(int64_t id) {
     assert(S->running == -1);
@@ -117,6 +126,7 @@ void coroutine_resume(int64_t id) {
     }
 }
 
+
 #ifdef SHARED_STACK
 static void _save_stack(coroutine *C, char *top) {
     char dummy = 0;
@@ -131,6 +141,7 @@ static void _save_stack(coroutine *C, char *top) {
 }
 #endif
 
+
 void coroutine_yield() {
     auto it = S->cos.find(S->running);
     assert(it != S->cos.end());
@@ -144,6 +155,7 @@ void coroutine_yield() {
     swapcontext(&C->ctx, &S->main);
 }
 
+
 int coroutine_status(int64_t id) {
     assert(id >= 0);
 
@@ -155,6 +167,8 @@ int coroutine_status(int64_t id) {
     return it->second->status;
 }
 
+
 int64_t coroutine_running_id() {
     return S->running;
 }
+

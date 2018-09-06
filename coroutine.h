@@ -5,6 +5,7 @@
 #include <ucontext.h>
 #include <unordered_map>
 #include <stddef.h>
+#include <functional>
 
 #define COROUTINE_DEAD 0
 #define COROUTINE_READY 1
@@ -15,12 +16,10 @@
 
 struct schedule;
 
-typedef void (*coroutine_func)(void *ud);
-
 struct coroutine {
-    coroutine(coroutine_func func, void *arg);
+    coroutine(std::function<void(void*)> func, void *arg);
 
-    coroutine_func _callback;
+    std::function<void(void*)> _callback;
     void *_arg;
     ucontext_t ctx;
     schedule *sch;
@@ -45,10 +44,10 @@ struct schedule {
 
 void coroutine_open();
 void coroutine_close();
-int64_t coroutine_new(coroutine_func, void *ud);
+void coroutine_yield();
+int64_t coroutine_running_id();
 void coroutine_resume(int64_t id);
 int coroutine_status(int64_t id);
-int64_t coroutine_running_id();
-void coroutine_yield();
+int64_t coroutine_new(std::function<void(void*)>, void *ud);
 
 #endif
