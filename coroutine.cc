@@ -148,7 +148,7 @@ void coroutine_yield() {
     coroutine *C = it->second;
 #ifdef SHARED_STACK
     assert((char *)&C > S->stack);
-    _save_stack(C,S->stack + STACK_SIZE);
+    _save_stack(C, S->stack + STACK_SIZE);
 #endif
     C->status = COROUTINE_SUSPEND;
     S->running = -1;
